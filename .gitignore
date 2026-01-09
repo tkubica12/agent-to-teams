@@ -8,6 +8,17 @@ __pycache__/
 
 # Distribution / packaging
 .Python
+
+# Environment files
+.env
+*.env.local
+
+# uv
+.uv/
+uv.lock
+
+# Streamlit
+.streamlit/
 build/
 develop-eggs/
 dist/
