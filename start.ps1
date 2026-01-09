@@ -4,6 +4,7 @@
 # Trap Ctrl+C to clean up processes
 $script:BackendJob = $null
 $script:FrontendJob = $null
+$script:TeamsAgentJob = $null
 
 function Cleanup {
     Write-Host "`n`nShutting down services..." -ForegroundColor Yellow
@@ -20,8 +21,14 @@ function Cleanup {
         Remove-Job -Job $script:FrontendJob -Force -ErrorAction SilentlyContinue
     }
     
-    # Kill any remaining uvicorn and streamlit processes
-    Get-Process | Where-Object { $_.ProcessName -like "*uvicorn*" -or $_.ProcessName -like "*streamlit*" } | Stop-Process -Force -ErrorAction SilentlyContinue
+    if ($script:TeamsAgentJob) {
+        Write-Host "Stopping Teams agent..." -ForegroundColor Yellow
+        Stop-Job -Job $script:TeamsAgentJob -ErrorAction SilentlyContinue
+        Remove-Job -Job $script:TeamsAgentJob -Force -ErrorAction SilentlyContinue
+    }
+    
+    # Kill any remaining uvicorn, streamlit, and python processes
+    Get-Process | Where-Object { $_.ProcessName -like "*uvicorn*" -or $_.ProcessName -like "*streamlit*" -or $_.ProcessName -like "*python*" } | Stop-Process -Force -ErrorAction SilentlyContinue
     
     Write-Host "✓ All services stopped" -ForegroundColor Green
     exit 0
@@ -45,36 +52,6 @@ if (!(Get-Command uv -ErrorAction SilentlyContinue)) {
 }
 Write-Host "✓ uv found" -ForegroundColor Green
 
-# Check if .env exists
-Write-Host "Checking environment configuration..." -ForegroundColor Yellow
-if (!(Test-Path ".env")) {
-    Write-Host "WARNING: .env file not found!" -ForegroundColor Red
-    Write-Host "Creating .env from .env.example..." -ForegroundColor Yellow
-    Copy-Item ".env.example" ".env"
-    Write-Host "✓ .env file created" -ForegroundColor Green
-    Write-Host ""
-    Write-Host "IMPORTANT: Edit .env file with your Azure OpenAI settings!" -ForegroundColor Red
-    Write-Host "  1. Open .env file" -ForegroundColor Yellow
-    Write-Host "  2. Replace YOUR-RESOURCE-NAME with your Azure OpenAI resource name" -ForegroundColor Yellow
-    Write-Host "  3. Update AZURE_OPENAI_MODEL_DEPLOYMENT if needed" -ForegroundColor Yellow
-    Write-Host ""
-    Read-Host "Press Enter when done to continue"
-} else {
-    Write-Host "✓ .env file found" -ForegroundColor Green
-}
-
-# Check Azure CLI login
-Write-Host "Checking Azure CLI login..." -ForegroundColor Yellow
-try {
-    $account = az account show 2>$null | ConvertFrom-Json
-    if ($account) {
-        Write-Host "✓ Logged in to Azure as: $($account.user.name)" -ForegroundColor Green
-    }
-} catch {
-    Write-Host "WARNING: Not logged in to Azure CLI" -ForegroundColor Red
-    Write-Host "Please run: az login" -ForegroundColor Yellow
-}
-
 # Install dependencies
 Write-Host "Installing dependencies..." -ForegroundColor Yellow
 uv sync --quiet
@@ -94,8 +71,9 @@ Write-Host ""
 # Start Backend
 Write-Host "[BACKEND] Starting on http://localhost:8000..." -ForegroundColor Cyan
 $script:BackendJob = Start-Job -ScriptBlock {
-    Set-Location $using:PWD
-    uv run uvicorn backend.main:app --host 0.0.0.0 --port 8000
+    Set-Location $using:PWD\backend
+    $env:PYTHONUNBUFFERED = "1"
+    uv run --directory .. uvicorn backend.main:app --host 0.0.0.0 --port 8000 2>&1
 }
 
 Start-Sleep -Seconds 2
@@ -103,8 +81,18 @@ Start-Sleep -Seconds 2
 # Start Frontend  
 Write-Host "[FRONTEND] Starting on http://localhost:8501..." -ForegroundColor Magenta
 $script:FrontendJob = Start-Job -ScriptBlock {
-    Set-Location $using:PWD
-    uv run streamlit run frontend/app.py
+    Set-Location $using:PWD\frontend
+    uv run --directory .. streamlit run $using:PWD\frontend\app.py 2>&1
+}
+
+Start-Sleep -Seconds 2
+
+# Start Teams Agent
+Write-Host "[TEAMS] Starting on http://localhost:3978..." -ForegroundColor Yellow
+$script:TeamsAgentJob = Start-Job -ScriptBlock {
+    Set-Location $using:PWD\teams-agent
+    $env:PYTHONUNBUFFERED = "1"
+    uv run python -u app.py 2>&1
 }
 
 Start-Sleep -Seconds 3
@@ -114,9 +102,10 @@ Write-Host "================================" -ForegroundColor Green
 Write-Host "✓ Services Running" -ForegroundColor Green
 Write-Host "================================" -ForegroundColor Green
 Write-Host ""
-Write-Host "Backend:  http://localhost:8000" -ForegroundColor Cyan
-Write-Host "API Docs: http://localhost:8000/docs" -ForegroundColor Cyan
-Write-Host "Frontend: http://localhost:8501" -ForegroundColor Magenta
+Write-Host "Backend:     http://localhost:8000" -ForegroundColor Cyan
+Write-Host "API Docs:    http://localhost:8000/docs" -ForegroundColor Cyan
+Write-Host "Frontend:    http://localhost:8501" -ForegroundColor Magenta
+Write-Host "Teams Agent: http://localhost:3978/api/messages" -ForegroundColor Yellow
 Write-Host ""
 Write-Host "Press Ctrl+C to stop all services" -ForegroundColor Yellow
 Write-Host ""
@@ -142,9 +131,18 @@ try {
             }
         }
         
+        # Get teams agent output
+        $teamsOutput = Receive-Job -Job $script:TeamsAgentJob -ErrorAction SilentlyContinue
+        if ($teamsOutput) {
+            $teamsOutput | ForEach-Object {
+                Write-Host "[TEAMS]    $_" -ForegroundColor Yellow
+            }
+        }
+        
         # Check if jobs are still running
         $backendState = (Get-Job -Id $script:BackendJob.Id).State
         $frontendState = (Get-Job -Id $script:FrontendJob.Id).State
+        $teamsState = (Get-Job -Id $script:TeamsAgentJob.Id).State
         
         if ($backendState -eq "Failed" -or $backendState -eq "Stopped") {
             Write-Host "`n[BACKEND] Service stopped unexpectedly!" -ForegroundColor Red
@@ -153,6 +151,11 @@ try {
         
         if ($frontendState -eq "Failed" -or $frontendState -eq "Stopped") {
             Write-Host "`n[FRONTEND] Service stopped unexpectedly!" -ForegroundColor Red
+            Cleanup
+        }
+        
+        if ($teamsState -eq "Failed" -or $teamsState -eq "Stopped") {
+            Write-Host "`n[TEAMS] Service stopped unexpectedly!" -ForegroundColor Red
             Cleanup
         }
         

@@ -239,6 +239,9 @@ async def send_message(session_id: str, request: MessageRequest):
         )
 
     except Exception as e:
+        import traceback
+        print(f"Error in send_message: {e}")
+        traceback.print_exc()
         raise HTTPException(
             status_code=500,
             detail=f"Error communicating with Azure OpenAI: {str(e)}",
