@@ -33,14 +33,22 @@ def start_server(
             if "Bearer " in auth_header:
                try:
                   token = auth_header.split("Bearer ")[1].strip()
-                  # JWT payload is the second part (header.payload.signature)
-                  if len(token.split('.')) >= 2:
-                     payload = token.split('.')[1]
-                     # Fix Base64 padding
-                     payload += '=' * (-len(payload) % 4)
-                     # Decode URL-safe Base64
-                     claims = json.loads(base64.urlsafe_b64decode(payload).decode('utf-8'))
-                     print(f"\n[DEBUG] Decoded JWT Token Claims (New Conversation):\n{json.dumps(claims, indent=2)}\n")
+                  # JWT has three parts: header.payload.signature
+                  token_parts = token.split('.')
+                  if len(token_parts) >= 2:
+                     # Decode header (first part)
+                     header_b64 = token_parts[0]
+                     header_b64 += '=' * (-len(header_b64) % 4)
+                     header = json.loads(base64.urlsafe_b64decode(header_b64).decode('utf-8'))
+                     
+                     # Decode payload (second part)
+                     payload_b64 = token_parts[1]
+                     payload_b64 += '=' * (-len(payload_b64) % 4)
+                     payload = json.loads(base64.urlsafe_b64decode(payload_b64).decode('utf-8'))
+                     
+                     print(f"\n[DEBUG] JWT Token (New Conversation):")
+                     print(f"Header:\n{json.dumps(header, indent=2)}")
+                     print(f"Payload (All Claims):\n{json.dumps(payload, indent=2, sort_keys=True)}\n")
                except Exception as e:
                   print(f"[DEBUG] Error decoding token: {e}")
       except Exception:

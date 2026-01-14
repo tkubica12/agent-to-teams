@@ -216,6 +216,80 @@ Write-Host "[OK] Bot Service Complete" -ForegroundColor Green
 Write-Host "================================" -ForegroundColor Green
 Write-Host ""
 
+# Create OAuth Connection for Teams SSO
+# ==============================================================================
+Write-Host "Creating OAuth Connection for Teams SSO..." -ForegroundColor Yellow
+Write-Host ""
+Write-Host "Do you want to create an OAuth connection for user authentication?" -ForegroundColor Yellow
+Write-Host "(Required for getting user tokens in the bot)" -ForegroundColor Gray
+$createOAuth = Read-Host "Create OAuth connection? (y/n)"
+
+if ($createOAuth -eq "y" -or $createOAuth -eq "Y") {
+    Write-Host ""
+    Write-Host "Enter the Client Secret from Step 1:" -ForegroundColor Yellow
+    $clientSecret = Read-Host "Client Secret" -AsSecureString
+    $clientSecretPlain = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($clientSecret))
+    
+    if (-not [string]::IsNullOrWhiteSpace($clientSecretPlain)) {
+        $oauthConnectionName = "entra"
+        $tokenExchangeUrl = "api://botid-$APP_ID"
+        
+        try {
+            # Check if connection exists
+            $existingConnection = az bot authsetting show `
+                --name $BOT_NAME `
+                --resource-group $RESOURCE_GROUP `
+                --setting-name $oauthConnectionName `
+                2>$null
+            
+            if ($existingConnection) {
+                Write-Host "OAuth connection '$oauthConnectionName' already exists, deleting..." -ForegroundColor Yellow
+                az bot authsetting delete `
+                    --name $BOT_NAME `
+                    --resource-group $RESOURCE_GROUP `
+                    --setting-name $oauthConnectionName `
+                    2>&1 | Out-Null
+            }
+            
+            # Create OAuth connection with Teams SSO support
+            az bot authsetting create `
+                --name $BOT_NAME `
+                --resource-group $RESOURCE_GROUP `
+                --setting-name $oauthConnectionName `
+                --client-id $APP_ID `
+                --client-secret $clientSecretPlain `
+                --service "Aadv2" `
+                --provider-scope-string "User.Read" `
+                --parameters "tenantId=$TENANT_ID" "tokenExchangeUrl=$tokenExchangeUrl" `
+                2>&1 | Out-Null
+            
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host "[OK] OAuth connection '$oauthConnectionName' created" -ForegroundColor Green
+                Write-Host "  Token Exchange URL: $tokenExchangeUrl" -ForegroundColor Gray
+            } else {
+                throw "Failed to create OAuth connection"
+            }
+        } catch {
+            Write-Host "WARNING: Failed to create OAuth connection" -ForegroundColor Yellow
+            Write-Host $_.Exception.Message -ForegroundColor Gray
+            Write-Host ""
+            Write-Host "You can create it manually in Azure Portal:" -ForegroundColor Yellow
+            Write-Host "  1. Go to Bot Service > Settings > Configuration > OAuth Connection Settings" -ForegroundColor Gray
+            Write-Host "  2. Add new connection with:" -ForegroundColor Gray
+            Write-Host "     - Name: entra" -ForegroundColor Gray
+            Write-Host "     - Service Provider: Azure Active Directory v2" -ForegroundColor Gray
+            Write-Host "     - Client ID: $APP_ID" -ForegroundColor Gray
+            Write-Host "     - Tenant ID: $TENANT_ID" -ForegroundColor Gray
+            Write-Host "     - Scopes: User.Read" -ForegroundColor Gray
+            Write-Host "     - Token Exchange URL: api://botid-$APP_ID" -ForegroundColor Gray
+        }
+    } else {
+        Write-Host "Skipping OAuth connection (no secret provided)" -ForegroundColor Yellow
+    }
+}
+
+Write-Host ""
+
 if (-not $MESSAGING_ENDPOINT) {
     Write-Host "[WARNING] Messaging endpoint not configured" -ForegroundColor Yellow
     Write-Host ""
@@ -231,11 +305,18 @@ if (-not $MESSAGING_ENDPOINT) {
 }
 
 Write-Host "Next Steps:" -ForegroundColor Yellow
-Write-Host "  1. Test in Azure Portal: Bot Service -> Test in Web Chat" -ForegroundColor Gray
-Write-Host "  2. Add Teams channel: Bot Service -> Channels -> Microsoft Teams" -ForegroundColor Gray
-Write-Host "  3. Create Teams app manifest for sideloading" -ForegroundColor Gray
+Write-Host "  1. Add Teams channel: Azure Portal > Bot Service > Channels > Microsoft Teams" -ForegroundColor Gray
+Write-Host "  2. Test in Azure Portal: Bot Service > Test in Web Chat" -ForegroundColor Gray
+Write-Host "  3. Create Teams app package using the manifest in teams-agent/appPackage/" -ForegroundColor Gray
+Write-Host "  4. Sideload the app in Teams to test" -ForegroundColor Gray
 Write-Host ""
 Write-Host "Bot Configuration:" -ForegroundColor Cyan
 Write-Host "  Name: $BOT_NAME" -ForegroundColor White
 Write-Host "  Resource Group: $RESOURCE_GROUP" -ForegroundColor White
+Write-Host "  App ID: $APP_ID" -ForegroundColor White
+Write-Host ""
+Write-Host "For Teams SSO (user token retrieval):" -ForegroundColor Cyan
+Write-Host "  1. Ensure OAuth connection 'entra' is configured (see above)" -ForegroundColor Gray
+Write-Host "  2. Update teams-agent/appPackage/manifest.json with your App ID" -ForegroundColor Gray
+Write-Host "  3. Note: SDK has known bug with invoke activities - check GitHub issues" -ForegroundColor Gray
 Write-Host ""

@@ -20,16 +20,84 @@ Azure OpenAI
 
 ### Key Components
 
-1. **`app.py`**: Main entry point using aiohttp web server
-2. **`bot.py`**: Teams SDK App configuration and message handlers
-3. **`backend_client.py`**: HTTP client for your proprietary backend API
-4. **`config.py`**: Configuration from environment variables
+1. **`app.py`**: Main entry point using Microsoft 365 Agents SDK
+2. **`backend_client.py`**: HTTP client for your proprietary backend API
+3. **`start_server.py`**: aiohttp server configuration
+4. **`appPackage/`**: Teams app manifest for sideloading
+
+## Setup Guide
+
+### Prerequisites
+1. Azure subscription
+2. Azure CLI installed and logged in
+3. Python 3.10+
+4. uv package manager
+
+### Step 1: Create App Registration
+Run the provisioning script from the repo root:
+```powershell
+.\1_create_app_registration.ps1
+```
+
+This creates:
+- Entra ID App Registration
+- Client secret
+- Redirect URIs for Bot Framework OAuth
+- API permissions (User.Read)
+- Application ID URI for Teams SSO (`api://botid-{appId}`)
+- Exposed `access_as_user` scope
+- Pre-authorized Teams client applications
+
+### Step 2: Create Azure Bot Service
+```powershell
+.\2_create_bot_service.ps1
+```
+
+This creates:
+- Azure Bot resource
+- OAuth connection named "entra" for user authentication
+- Teams channel configuration
+
+### Step 3: Configure Environment
+Copy the output from Step 1 to `teams-agent/.env`:
+```env
+CONNECTIONS__SERVICE_CONNECTION__SETTINGS__CLIENTID=your-app-id
+CONNECTIONS__SERVICE_CONNECTION__SETTINGS__CLIENTSECRET=your-secret
+CONNECTIONS__SERVICE_CONNECTION__SETTINGS__TENANTID=your-tenant-id
+CONNECTIONSMAP_0_SERVICEURL=*
+CONNECTIONSMAP_0_CONNECTION=SERVICE_CONNECTION
+AGENTAPPLICATION__USERAUTHORIZATION__HANDLERS__GRAPH__SETTINGS__AZUREBOTOAUTHCONNECTIONNAME=entra
+```
+
+### Step 4: Update Teams App Manifest
+Edit `appPackage/manifest.json` and replace the App ID:
+- Line 5: `"id": "YOUR-APP-ID"`
+- Line 28: `"botId": "YOUR-APP-ID"`
+- Line 57: `"resource": "api://botid-YOUR-APP-ID"`
+
+Then create the app package:
+```powershell
+Compress-Archive -Path appPackage\* -DestinationPath appPackage.zip -Force
+```
+
+### Step 5: Deploy & Test
+1. Start services: `.\start.ps1` (from repo root)
+2. Expose port 3978 via Dev Tunnel or deploy to cloud
+3. Update messaging endpoint: `.\3_update_endpoint.ps1`
+4. Sideload `appPackage.zip` in Teams
+
+## Known Issues
+
+### SDK OAuth Bug (as of v0.7.0)
+The Microsoft 365 Agents SDK has a known bug where the `Authorization` class throws `Unknown activity type invoke` when handling Teams SSO token exchange. This is tracked in [GitHub Issue #361](https://github.com/microsoft/Agents/issues/361).
+
+**Workaround**: The bot currently runs without the Authorization middleware. User information (ID, name, tenant) is available from the activity, but full OAuth token retrieval requires a fix from Microsoft.
 
 ## How It Works
 
 ### Session Management
 - Each Teams conversation is mapped to a backend session ID
-- Session IDs are stored in Teams conversation state (persists across messages)
+- Session IDs are stored in memory (for demo purposes)
 - If a backend session expires (404), a new one is automatically created
 
 ### Message Flow
@@ -42,11 +110,10 @@ Azure OpenAI
 ## Technology Stack
 
 ### Modern Microsoft Stack (2025+)
-- **Microsoft Teams SDK v2** (`microsoft-teams-apps` package)
-  - Successor to deprecated Bot Framework SDK
-  - Recommended by Microsoft as the modern approach
-  - Better developer experience and future-proof
-- **aiohttp**: Standard async web framework (used by Microsoft examples)
+- **Microsoft 365 Agents SDK** (`microsoft-agents-hosting-aiohttp` package)
+  - Modern approach recommended by Microsoft
+  - Replaces deprecated Bot Framework SDK
+- **aiohttp**: Standard async web framework
 - **Azure Bot Service**: Cloud identity and channel connection
 
 ### Why This Approach?

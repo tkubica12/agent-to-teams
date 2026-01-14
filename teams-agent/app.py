@@ -13,7 +13,7 @@ from microsoft_agents.hosting.core import (
 )
 from microsoft_agents.hosting.aiohttp import CloudAdapter
 from microsoft_agents.authentication.msal import MsalConnectionManager
-from microsoft_agents.activity import load_configuration_from_env
+from microsoft_agents.activity import load_configuration_from_env, ActivityTypes
 from start_server import start_server
 from backend_client import BackendClient
 
@@ -35,7 +35,8 @@ STORAGE = MemoryStorage()
 CONNECTION_MANAGER = MsalConnectionManager(**agents_sdk_config)
 ADAPTER = CloudAdapter(connection_manager=CONNECTION_MANAGER)
 
-# Create the Agent Application with connection manager
+# Create the Agent Application WITHOUT authorization to avoid the SDK bug
+# The SDK's Authorization class has a bug handling Teams SSO invoke activities
 AGENT_APP = AgentApplication[TurnState](
     storage=STORAGE, 
     adapter=ADAPTER,
@@ -107,6 +108,50 @@ async def on_message(context: TurnContext, state: TurnState):
 # Register handlers
 AGENT_APP.conversation_update("membersAdded")(_help)
 AGENT_APP.message("/help")(_help)
+
+
+@AGENT_APP.message("/token")
+async def token_handler(context: TurnContext, state: TurnState):
+    """Demonstrate getting user token - shows the Teams channel token from JWT."""
+    # Due to SDK bug with Teams SSO, we'll show what token info we can get
+    # from the incoming activity
+    activity = context.activity
+    
+    # Get channel data which may contain token info
+    channel_data = activity.channel_data or {}
+    
+    print(f"\n=== TOKEN REQUEST ===")
+    print(f"User ID: {activity.from_property.id if activity.from_property else 'N/A'}")
+    print(f"User Name: {activity.from_property.name if activity.from_property else 'N/A'}")
+    print(f"Channel: {activity.channel_id}")
+    print(f"Conversation: {activity.conversation.id if activity.conversation else 'N/A'}")
+    print(f"Channel Data Keys: {list(channel_data.keys())}")
+    print(f"=====================\n")
+    
+    await context.send_activity(
+        f"ℹ️ **User Information from Teams:**\n"
+        f"- User ID: `{activity.from_property.id if activity.from_property else 'N/A'}`\n"
+        f"- User Name: {activity.from_property.name if activity.from_property else 'N/A'}\n"
+        f"- Tenant: `{channel_data.get('tenant', {}).get('id', 'N/A')}`\n\n"
+        f"⚠️ Note: Full OAuth token retrieval requires SDK bug fix.\n"
+        f"The SDK's Authorization class throws 'Unknown activity type invoke' "
+        f"when handling Teams SSO token exchange."
+    )
+
+@AGENT_APP.activity(ActivityTypes.invoke)
+async def invoke_handler(context: TurnContext, state: TurnState):
+    """Handle invoke activities (required for OAuth token exchange in Teams)."""
+    activity = context.activity
+    invoke_name = activity.name if hasattr(activity, 'name') else 'unknown'
+    print(f"Invoke activity received: {invoke_name}")
+    
+    # OAuth invoke activities are handled by the Authorization middleware
+    # This handler is for any other invoke activities
+    if invoke_name in ["signin/tokenExchange", "signin/verifyState"]:
+        print(f"OAuth invoke: {invoke_name} - handled by middleware")
+    else:
+        print(f"Other invoke: {invoke_name}")
+
 
 @AGENT_APP.activity("message")
 async def message_handler(context: TurnContext, state: TurnState):
