@@ -1,15 +1,13 @@
 # app.py
 """Simple agent using Microsoft 365 Agent SDK that responds with a test message."""
 import asyncio
-import uuid
 from microsoft_agents.hosting.core import (
     AgentApplication,
     TurnState,
     TurnContext,
     MemoryStorage,
 )
-from microsoft_agents.hosting.aiohttp import CloudAdapter
-from microsoft_agents.activity import Activity, ActivityTypes
+from microsoft_agents.hosting.aiohttp import CloudAdapter, Citation
 from start_server import start_server
 
 # Create the Agent Application
@@ -41,11 +39,12 @@ AGENT_APP.message("/help")(_help)
 @AGENT_APP.activity("message")
 async def on_message(context: TurnContext, _: TurnState):
     """Respond to any message with informative thinking events and a token-by-token streamed response with citations."""
-    # Generate unique stream ID for this interaction
-    stream_id = str(uuid.uuid4())
-    sequence = 1
+    # Use the SDK's built-in StreamingResponse helper
+    # Enable AI features
+    context.streaming_response.set_feedback_loop(True)
+    context.streaming_response.set_generated_by_ai_label(True)
     
-    # Thinking events to stream (informative - shows in thinking box)
+    # Thinking events (informative - shows in thinking indicator)
     thinking_events = [
         "Got it, looking into it",
         "Searching Internet",
@@ -53,92 +52,44 @@ async def on_message(context: TurnContext, _: TurnState):
         "Thinking"
     ]
     
-    # Stream each thinking event with 2-second delays
+    # Stream each thinking event with delays
     for event_text in thinking_events:
-        await context.send_activity(Activity(
-            type=ActivityTypes.typing,
-            text=event_text,
-            entities=[{
-                "type": "streaminfo",
-                "streamId": stream_id,
-                "streamType": "informative",
-                "streamSequence": sequence
-            }]
-        ))
-        sequence += 1
+        context.streaming_response.queue_informative_update(event_text)
         await asyncio.sleep(2)  # 2-second delay between events
     
     # Final response text with citations
     full_response = (
-        "Hello, this is test message from Python! [1][2] "
+        "Hello, this is test message from Python! [doc1][doc2] "
         "This demonstrates how citations work in Microsoft Teams and Copilot."
     )
     
     # Stream the response token by token (simulating LLM output)
-    accumulated_text = ""
     words = full_response.split()
     
-    for i, word in enumerate(words):
-        accumulated_text += word + " "
-        
-        # Send streaming activity with accumulated text
-        await context.send_activity(Activity(
-            type=ActivityTypes.typing,
-            text=accumulated_text.strip(),
-            entities=[{
-                "type": "streaminfo",
-                "streamId": stream_id,
-                "streamType": "streaming",
-                "streamSequence": sequence
-            }]
-        ))
-        sequence += 1
-        
-        # Small delay between words to simulate typing (0.1 seconds per word)
-        await asyncio.sleep(0.1)
+    for word in words:
+        context.streaming_response.queue_text_chunk(word + " ")
+        await asyncio.sleep(0.1)  # Small delay between words
     
-    # Send final message with citations (this ends the stream)
-    final_message = Activity(
-        type=ActivityTypes.message,  # Use "message" type for final
-        text=full_response,
-        entities=[
-            {
-                "type": "streaminfo",
-                "streamId": stream_id,
-                "streamType": "final"  # Use "final" for the last message
-                # NO streamSequence on final message!
-            },
-            {
-                "type": "https://schema.org/Message",
-                "@type": "Message",
-                "@context": "https://schema.org",
-                "@id": "",
-                "additionalType": ["AIGeneratedContent"],
-                "citations": [
-                    {
-                        "@type": "Claim",
-                        "position": "1",
-                        "appearance": {
-                            "name": "Microsoft 365 Agent SDK Documentation",
-                            "abstract": "The Microsoft 365 Agent SDK enables building enterprise-grade "
-                                       "conversational AI agents with features like citations and streaming."
-                        }
-                    },
-                    {
-                        "@type": "Claim",
-                        "position": "2",
-                        "appearance": {
-                            "name": "Python Agent Sample",
-                            "abstract": "This is a simple example demonstrating how to use the Agent SDK "
-                                       "with Python to create responsive bot applications."
-                        }
-                    }
-                ]
-            }
-        ]
-    )
+    # Set citations for the final message
+    context.streaming_response.set_citations([
+        Citation(
+            title="Microsoft 365 Agent SDK Documentation",
+            content="The Microsoft 365 Agent SDK enables building enterprise-grade "
+                   "conversational AI agents with features like citations and streaming.",
+            filepath="",
+            url="https://learn.microsoft.com/en-us/microsoft-365-copilot/extensibility/"
+        ),
+        Citation(
+            title="Python Agent Sample",
+            content="This is a simple example demonstrating how to use the Agent SDK "
+                   "with Python to create responsive bot applications.",
+            filepath="",
+            url="https://github.com/microsoft/Agents-for-python"
+        )
+    ])
     
-    await context.send_activity(final_message)
+    # End the stream (sends final message with all accumulated text and citations)
+    await context.streaming_response.end_stream()
 
 
 # Start the server

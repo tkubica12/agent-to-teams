@@ -9,14 +9,14 @@ param(
 if (-not $AppId) {
     # Try to read from .env file
     if (Test-Path ".env") {
-        $envContent = Get-Content ".env" | Where-Object { $_ -match "^MICROSOFT_APP_ID=" }
+        $envContent = Get-Content ".env" | Where-Object { $_ -match "^CONNECTIONS__SERVICE_CONNECTION__SETTINGS__CLIENTID=" }
         if ($envContent) {
             $AppId = ($envContent -split "=")[1].Trim()
         }
     }
     
     if (-not $AppId) {
-        Write-Error "MICROSOFT_APP_ID not found. Please provide it as a parameter or set it in .env file."
+        Write-Error "CONNECTIONS__SERVICE_CONNECTION__SETTINGS__CLIENTID not found. Please provide it as a parameter or set it in .env file."
         exit 1
     }
 }

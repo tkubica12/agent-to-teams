@@ -60,80 +60,27 @@ az bot msteams create `
 
 ### Step 1: Create App Icons
 
-You need two icon files:
+You need two icon files in the `appPackage` folder:
 - **color.png**: 192x192 pixels, full color app icon
 - **outline.png**: 32x32 pixels, transparent outline icon
 
 For testing, you can use simple placeholder icons or create them with any image editor.
 
-### Step 2: Create manifest.json
+### Step 2: Generate App Package
 
-Create `appPackage/manifest.json` with your bot's App ID:
-
-```json
-{
-  "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.17/MicrosoftTeams.schema.json",
-  "manifestVersion": "1.17",
-  "version": "1.0.0",
-  "id": "YOUR-APP-ID-HERE",
-  "developer": {
-    "name": "Your Name",
-    "websiteUrl": "https://example.com",
-    "privacyUrl": "https://example.com/privacy",
-    "termsOfUseUrl": "https://example.com/terms"
-  },
-  "name": {
-    "short": "Simple Agent",
-    "full": "Simple Agent - Step 3"
-  },
-  "description": {
-    "short": "A simple test agent",
-    "full": "A simple Python agent demonstrating streaming responses with citations in Microsoft Teams."
-  },
-  "icons": {
-    "color": "color.png",
-    "outline": "outline.png"
-  },
-  "accentColor": "#5558AF",
-  "bots": [
-    {
-      "botId": "YOUR-APP-ID-HERE",
-      "scopes": ["personal", "team", "groupChat"],
-      "supportsFiles": false,
-      "isNotificationOnly": false,
-      "commandLists": [
-        {
-          "scopes": ["personal"],
-          "commands": [
-            {
-              "title": "help",
-              "description": "Show help message"
-            }
-          ]
-        }
-      ]
-    }
-  ],
-  "permissions": ["identity", "messageTeamMembers"],
-  "validDomains": []
-}
-```
-
-**Important**: Replace `YOUR-APP-ID-HERE` with your actual `MICROSOFT_APP_ID` from the .env file (in both the `id` field and `botId` field).
-
-### Step 3: Create the App Package
-
-Package the manifest and icons into a ZIP file:
+Use the provided PowerShell script to generate your Teams app package:
 
 ```powershell
-# Navigate to the appPackage folder
-cd appPackage
-
-# Create the ZIP package
-Compress-Archive -Path manifest.json, color.png, outline.png -DestinationPath ../SimpleAgent.zip -Force
-
-cd ..
+.\generate_app_package.ps1
 ```
+
+This script automatically:
+1. Reads your App ID from `CONNECTIONS__SERVICE_CONNECTION__SETTINGS__CLIENTID` in the .env file
+2. Generates `manifest.json` from the template (`appPackage/manifest.template.json`)
+3. Creates a ZIP file (`SimpleAgent.zip`) containing the manifest and icons
+4. Validates that required icons are present
+
+The script will output the location of the generated ZIP file and any warnings if icons are missing.
 
 ## Install App in Teams
 
