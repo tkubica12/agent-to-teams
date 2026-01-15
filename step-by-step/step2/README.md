@@ -72,6 +72,10 @@ Write-Host "App Password: $APP_PASSWORD"
 # Get Tenant ID
 $TENANT_ID = az account show --query tenantId -o tsv
 Write-Host "Tenant ID: $TENANT_ID"
+
+# Create Service Principal (Enterprise Application)
+az ad sp create --id $APP_ID
+Write-Host "Service Principal created for App ID: $APP_ID"
 ```
 
 ### Step 4: Create Azure Bot Service
@@ -96,11 +100,18 @@ Write-Host "Bot created: $BOT_NAME"
 Copy the values from the previous commands into your `.env` file:
 
 ```powershell
-# Update your .env file with these values
+# Update your .env file with these values (using SDK format)
 @"
-MICROSOFT_APP_ID=$APP_ID
-MICROSOFT_APP_PASSWORD=$APP_PASSWORD
-MICROSOFT_APP_TENANT_ID=$TENANT_ID
+# Azure Bot Service Configuration
+CONNECTIONS__SERVICE_CONNECTION__SETTINGS__CLIENTID=$APP_ID
+CONNECTIONS__SERVICE_CONNECTION__SETTINGS__CLIENTSECRET=$APP_PASSWORD
+CONNECTIONS__SERVICE_CONNECTION__SETTINGS__TENANTID=$TENANT_ID
+
+# Connection mapping (maps all service URLs to use service_connection)
+CONNECTIONSMAP_0_SERVICEURL=*
+CONNECTIONSMAP_0_CONNECTION=service_connection
+
+# Server Configuration
 PORT=3978
 "@ | Set-Content .env
 

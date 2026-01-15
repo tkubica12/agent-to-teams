@@ -9,31 +9,27 @@ from microsoft_agents.hosting.core import (
     TurnState,
     TurnContext,
     MemoryStorage,
-    AgentAuthConfiguration,
 )
-from microsoft_agents.hosting.aiohttp import (
-    CloudAdapter,
-    start_agent_process,
-    jwt_authorization_middleware,
-)
-from microsoft_agents.activity import Activity, ActivityTypes
-from aiohttp.web import Request, Response, Application, run_app
+from microsoft_agents.hosting.aiohttp import CloudAdapter
+from microsoft_agents.authentication.msal import MsalConnectionManager
+from microsoft_agents.activity import Activity, ActivityTypes, load_configuration_from_env
+from start_server import start_server
 
 # Load environment variables from .env file
 load_dotenv()
 
-# Create authentication configuration from environment variables
-AUTH_CONFIG = AgentAuthConfiguration(
-    client_id=os.getenv("MICROSOFT_APP_ID"),
-    tenant_id=os.getenv("MICROSOFT_APP_TENANT_ID"),
-    client_secret=os.getenv("MICROSOFT_APP_PASSWORD"),
-)
+# Load SDK configuration from environment variables
+# Expects: CONNECTIONS__SERVICE_CONNECTION__SETTINGS__CLIENTID, etc.
+agents_sdk_config = load_configuration_from_env(dict(os.environ))
 
-# Create the Agent Application
-# Using MemoryStorage for simple in-memory state management
+# Create connection manager for authentication with Azure Bot Service
+CONNECTION_MANAGER = MsalConnectionManager(**agents_sdk_config)
+
+# Create the Agent Application with authenticated CloudAdapter
 AGENT_APP = AgentApplication[TurnState](
     storage=MemoryStorage(), 
-    adapter=CloudAdapter()
+    adapter=CloudAdapter(connection_manager=CONNECTION_MANAGER),
+    **agents_sdk_config
 )
 
 
@@ -178,32 +174,18 @@ async def on_message(context: TurnContext, _: TurnState):
 # Start the server
 if __name__ == "__main__":
     try:
+        # Get the default auth config from connection manager
+        auth_config = CONNECTION_MANAGER.get_default_connection_configuration()
+        
         print("=" * 60)
         print("Simple Test Agent - Step 2 (Azure Bot Service)")
         print("=" * 60)
-        print(f"App ID: {AUTH_CONFIG.CLIENT_ID}")
-        print(f"Tenant ID: {AUTH_CONFIG.TENANT_ID}")
+        print(f"App ID: {auth_config.CLIENT_ID}")
+        print(f"Tenant ID: {auth_config.TENANT_ID}")
         print("=" * 60)
         
-        # Create entry point for handling bot messages
-        async def handle_messages(req: Request) -> Response:
-            """Handle incoming requests to the /api/messages endpoint."""
-            return await start_agent_process(req, AGENT_APP, AGENT_APP.adapter)
-        
-        # Create aiohttp application with JWT middleware
-        APP = Application(middlewares=[jwt_authorization_middleware])
-        APP.router.add_post("/api/messages", handle_messages)
-        APP.router.add_get("/api/messages", lambda _: Response(status=200, text="Bot is running"))
-        APP["agent_configuration"] = AUTH_CONFIG
-        APP["agent_app"] = AGENT_APP
-        APP["adapter"] = AGENT_APP.adapter
-        
-        # Start the server
-        port = int(os.getenv("PORT", 3978))
-        print(f"Starting server on http://localhost:{port}")
-        print("Listening for messages on /api/messages")
-        print("=" * 60)
-        run_app(APP, host="0.0.0.0", port=port)
+        # Start server with authentication configuration
+        start_server(AGENT_APP, auth_config)
         
     except Exception as error:
         print(f"Error starting server: {error}")
