@@ -1,5 +1,5 @@
 # app.py
-"""Simple agent using Microsoft 365 Agent SDK that responds with a test message."""
+"""Simple agent using Microsoft 365 Agent SDK with streaming responses."""
 import asyncio
 import os
 from dotenv import load_dotenv
@@ -130,7 +130,7 @@ if __name__ == "__main__":
         auth_config = CONNECTION_MANAGER.get_default_connection_configuration()
         
         print("=" * 60)
-        print("Simple Test Agent - Step 2 (Azure Bot Service)")
+        print("Simple Test Agent")
         print("=" * 60)
         print(f"App ID: {auth_config.CLIENT_ID}")
         print(f"Tenant ID: {auth_config.TENANT_ID}")

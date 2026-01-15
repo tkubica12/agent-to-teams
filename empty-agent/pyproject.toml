@@ -1,0 +1,11 @@
+[project]
+name = "empty-agent"
+version = "0.1.0"
+description = "Simple empty agent using Microsoft 365 Agent SDK"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "microsoft-agents-hosting-aiohttp>=0.6.1",
+    "microsoft-agents-authentication-msal>=0.6.1",
+    "python-dotenv>=1.0.0",
+]

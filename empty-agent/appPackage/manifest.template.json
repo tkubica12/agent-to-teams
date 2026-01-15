@@ -1,0 +1,45 @@
+{
+    "$schema": "https://developer.microsoft.com/json-schemas/teams/v1.19/MicrosoftTeams.schema.json",
+    "manifestVersion": "1.19",
+    "version": "1.0.0",
+    "id": "${{APP_ID}}",
+    "developer": {
+        "name": "Test Developer",
+        "websiteUrl": "https://example.com",
+        "privacyUrl": "https://example.com/privacy",
+        "termsOfUseUrl": "https://example.com/terms"
+    },
+    "name": {
+        "short": "Empty Agent",
+        "full": "Empty Agent - Microsoft 365 Agent SDK Demo"
+    },
+    "description": {
+        "short": "A simple test agent",
+        "full": "A simple test agent built with Microsoft 365 Agent SDK demonstrating streaming responses and citations."
+    },
+    "icons": {
+        "outline": "outline.png",
+        "color": "color.png"
+    },
+    "accentColor": "#FFFFFF",
+    "bots": [
+        {
+            "botId": "${{APP_ID}}",
+            "scopes": ["personal", "team", "groupChat"],
+            "supportsFiles": false,
+            "isNotificationOnly": false,
+            "commandLists": [
+                {
+                    "scopes": ["personal"],
+                    "commands": [
+                        {
+                            "title": "help",
+                            "description": "Show help message"
+                        }
+                    ]
+                }
+            ]
+        }
+    ],
+    "validDomains": []
+}

@@ -2,6 +2,13 @@
 
 This project demonstrates how to integrate a proprietary Chatbot API (Backend) with Microsoft Teams using a "Teams Agent" middleware.
 
+## Getting Started
+
+**New to this project?** Start with the [empty-agent](./empty-agent/) folder - it contains a simple agent that demonstrates the Microsoft 365 Agent SDK with streaming responses, citations, and step-by-step instructions for:
+1. Local testing with Teams App Test Tool
+2. Azure Bot Service integration
+3. Microsoft Teams deployment
+
 ## Architecture
 
 The solution consists of three main components:
@@ -21,6 +28,11 @@ The solution consists of three main components:
     -   **Type**: Bot (Microsoft 365 Agents SDK for Python)
     -   **Function**: Acts as a proxy/middleware. It receives messages from Microsoft Teams (via Azure Bot Service), forwards them to the Backend, and returns the response to Teams.
     -   **Port**: 3978 (Publicly reachable via Azure Bot Service)
+
+4.  **Empty Agent** (`/empty-agent`):
+    -   **Type**: Simple demonstration bot
+    -   **Function**: A minimal agent showing streaming responses, citations, and AI labels. Great starting point for learning the SDK.
+    -   **Port**: 3978
 
 ## Setup & Usage
 
